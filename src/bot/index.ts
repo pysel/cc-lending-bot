@@ -1,10 +1,9 @@
 import { IBotInterface, BotStatus, BotEvent, BotEventType } from '../types';
 import axios, { AxiosInstance } from 'axios';
-import { prepareCallRequestAaveSupply } from './quotes';
 import { Config } from '../config';
-import { fetchCallQuote, prepareCallQuote } from '../lib/onebalance';
-import { signOperation } from '../lib/signer';
-import { CallRequest, EvmAccount } from '../types/onebalance';
+import { getApys } from "lending-apy-fetcher-ts";
+import { allProtocols } from './protocols';
+import { getBestAPYForEachToken } from '../utils/apy';
 
 // OneBalance API base URL and API key (for reference)
 export const API_BASE_URL = 'https://be.onebalance.io/api';
@@ -49,32 +48,18 @@ export class Bot implements IBotInterface {
       console.log('🔄 Starting bot operations...');
       await this.setupOneBalanceAccount();
 
-      const evmAccount: EvmAccount = {
-        accountAddress: this.accountAddressOneBalance! as `0x${string}`,
-        sessionAddress: this.config.getWallet().address as `0x${string}`,
-        adminAddress: this.config.getWallet().address as `0x${string}`,
-      };
-      
-      // quote from eth -> arbitrum aave supply
-      const prepareQuoteRequest = await prepareCallRequestAaveSupply(this.config, this.accountAddressOneBalance!, '1', "USDC", "ARBITRUM", "POLYGON");
-      // console.log('🔍 Prepare quote request:', prepareQuoteRequest);
+      while(true) {
+        let apyData = await getApys(allProtocols);
+        let bestApyData = getBestAPYForEachToken(apyData);
+        console.log('🔍 Best APY data:', bestApyData); 
+        await new Promise(resolve => setTimeout(resolve,  1000)); // 1 second
+      }
 
-      const preparedQuote = await prepareCallQuote(prepareQuoteRequest);
-      // console.log('🔍 Quote:', preparedQuote);
+      // // quote from eth -> arbitrum aave supply
+      // const prepareQuoteRequest = await prepareCallRequestAaveSupply(this.config, this.accountAddressOneBalance!, '1', "USDC", "ARBITRUM", "POLYGON");
+      // // console.log('🔍 Prepare quote request:', prepareQuoteRequest);
 
-      const signedChainOp = await signOperation(preparedQuote.chainOperation, this.config.privateKey as `0x${string}`);
-      console.log('🔍 Signed chain op:', signedChainOp);
-
-      const callRequest: CallRequest = {
-        fromAggregatedAssetId: 'ds:usdc',
-        account: evmAccount,
-        tamperProofSignature: preparedQuote.tamperProofSignature,
-        chainOperation: signedChainOp,
-      };
-
-      const callQuote = await fetchCallQuote(callRequest);
-      console.log('🔍 Call quote:', callQuote);
-
+      // await executeAaveSupplyQuote(prepareQuoteRequest, this.config, this.accountAddressOneBalance!);
     } catch (error) {
       this.status = BotStatus.ERROR;  
       this.emitEvent({ 
@@ -162,4 +147,4 @@ export class Bot implements IBotInterface {
       throw error;
     }
   }
-} 
+}
