@@ -1,5 +1,6 @@
 import { BotConfig } from '../types';
 import { Wallet, JsonRpcProvider } from 'ethers';
+import { ETHEREUM, ARBITRUM, POLYGON, OPTIMISM } from 'lending-apy-fetcher-ts';
 
 /**
  * Configuration class for managing environment variables and settings
@@ -20,10 +21,10 @@ export class Config implements BotConfig {
   }
 
   public readonly chainsHumanToOB: Record<string, string> = {
-    "ETHEREUM": 'eip155:1',
-    "ARBITRUM": 'eip155:42161',
-    "POLYGON": 'eip155:137',
-    "OPTIMISM": 'eip155:10',
+    [ETHEREUM]: 'eip155:1',
+    [ARBITRUM]: 'eip155:42161',
+    [POLYGON]: 'eip155:137',
+    [OPTIMISM]: 'eip155:10',
   }
 
   public readonly assetsHumanToOB: Record<string, string> = {
@@ -32,10 +33,16 @@ export class Config implements BotConfig {
 
   public readonly assetsHumanToChainAddress: Record<string, Record<string, string>> = {
     "USDC": { 
-      "ETHEREUM": '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48',
-      "ARBITRUM": '0xaf88d065e77c8cC2239327C5EDb3A432268e5831',
-      "POLYGON": '0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359',
-      "OPTIMISM": '0x0b2C639c533813f4Aa9D7837CAf62653d097Ff85',
+      [ETHEREUM]: '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48',
+      [ARBITRUM]: '0xaf88d065e77c8cC2239327C5EDb3A432268e5831',
+      [POLYGON]: '0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359',
+      [OPTIMISM]: '0x0b2C639c533813f4Aa9D7837CAf62653d097Ff85',
+    },
+    "aUSDC": {
+      [ETHEREUM]: '0x98C23E9d8f34FEFb1B7BD6a91B7FF122F4e16F5c',
+      [ARBITRUM]: '0x625E7708f30cA75bfd92586e17077590C60eb4cD',
+      [POLYGON]: '0x625E7708f30cA75bfd92586e17077590C60eb4cD',
+      [OPTIMISM]: '0x625E7708f30cA75bfd92586e17077590C60eb4cD',
     }
   }
 

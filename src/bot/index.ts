@@ -4,6 +4,10 @@ import { Config } from '../config';
 import { getApys } from "lending-apy-fetcher-ts";
 import { allProtocols } from './protocols';
 import { getBestAPYForEachToken } from '../utils/apy';
+import { executeAaveQuote, fetchAaveAllocationForToken } from './aave-allocations';
+import { toAggregatedAssetId, toAToken } from '../utils/conversions';
+import { prepareCallRequestAaveSupply, prepareCallRequestAaveWithdraw } from './quotes';
+import { AggregatedAssetBalance, AggregatedBalanceParticular } from '../types/onebalance';
 
 // OneBalance API base URL and API key (for reference)
 export const API_BASE_URL = 'https://be.onebalance.io/api';
@@ -17,6 +21,14 @@ export const apiClient = (apiKey: string) => axios.create({
     },  
 });
 
+const enabledTokens = ["USDC"];
+
+export interface Allocation {
+  amount: string;
+  atAPY: number;
+  chainId: string;
+}
+
 /**
  * Main Bot class that handles the lending vault operations
  */
@@ -26,6 +38,7 @@ export class Bot implements IBotInterface {
   private intervalId: NodeJS.Timeout | null = null;
   private apiClient: AxiosInstance;
   private accountAddressOneBalance: string | null = null;
+  private existingAllocations: Record<string, Allocation> = {}; // token symbol -> current allocation
 
   constructor(config: Config) {
     this.config = config;
@@ -47,12 +60,44 @@ export class Bot implements IBotInterface {
 
       console.log('🔄 Starting bot operations...');
       await this.setupOneBalanceAccount();
+      await this.fetchExistingAllocations();
 
       while(true) {
         let apyData = await getApys(allProtocols);
         let bestApyData = getBestAPYForEachToken(apyData);
-        console.log('🔍 Best APY data:', bestApyData); 
-        await new Promise(resolve => setTimeout(resolve,  1000)); // 1 second
+
+        // console.log('🔍 Best APY data:', bestApyData); 
+
+        for (const apyData of bestApyData) {
+          // skip if the token is not enabled
+          if (!enabledTokens.includes(apyData.token_symbol)) {
+            continue;
+          }
+
+          const apyChainId = this.config.chainsHumanToOB[apyData.network]!;
+          
+          // skip if the token is already at the best APY
+          if (this.existingAllocations[apyData.token_symbol]!.atAPY > apyData.apy || this.existingAllocations[apyData.token_symbol]!.chainId === apyChainId) {
+            continue;
+          }
+
+          const token = apyData.token_symbol;
+          const withdrawAmount = this.existingAllocations[token]!.amount;
+          // console.log('🔍 APY Data:', apyData);
+          if (withdrawAmount !== '0') {
+            const prepareWithdrawQuoteRequest = await prepareCallRequestAaveWithdraw(this.config, this.accountAddressOneBalance!, withdrawAmount, token, apyChainId);
+            await executeAaveQuote(prepareWithdrawQuoteRequest, this.config.getWallet(), this.accountAddressOneBalance!, this.config.assetsHumanToOB[token]!);
+          }
+          
+          const aggregatedAsset = toAggregatedAssetId(token);
+          const aggregatedAssetBalance = await this.getAggregatedBalanceForToken(this.accountAddressOneBalance!, aggregatedAsset);
+          const tokenAddress = this.config.assetsHumanToChainAddress[token]![apyData.network]!;
+
+          // reallocate the funds
+          const prepareSupplyQuoteRequest = await prepareCallRequestAaveSupply(this.config, this.accountAddressOneBalance!, aggregatedAssetBalance, apyChainId, tokenAddress);
+          console.log('🔍 Prepare supply quote request:', prepareSupplyQuoteRequest);
+          await executeAaveQuote(prepareSupplyQuoteRequest, this.config.getWallet(), this.accountAddressOneBalance!, this.config.assetsHumanToOB[token]!);
+        } 
       }
 
       // // quote from eth -> arbitrum aave supply
@@ -85,6 +130,17 @@ export class Bot implements IBotInterface {
       return response.data;
     } catch (error) {
       console.error('Error fetching aggregated balance:', error);
+      throw error;
+    }
+  }
+
+  async getAggregatedBalanceForToken(address: string, aggregatedAsset: string): Promise<AggregatedAssetBalance> {
+    try {
+      const response = await this.apiClient.get(`/v2/balances/aggregated-balance?address=${address}`);
+      const aggregatedBalance: AggregatedBalanceParticular = response.data;
+      return aggregatedBalance.balanceByAggregatedAsset.find(asset => asset.aggregatedAssetId === aggregatedAsset)!;
+    } catch (error) {
+      console.error('Error fetching aggregated balance for token:', error);
       throw error;
     }
   }
@@ -145,6 +201,24 @@ export class Bot implements IBotInterface {
     } catch (error) {
       console.error('Error predicting account address:', error);
       throw error;
+    }
+  }
+
+  async fetchExistingAllocations() {
+    for (const protocol of allProtocols) {
+      const network = protocol.network;
+      for (const token of enabledTokens) {
+        const aToken = toAToken(token);
+        const aTokenAddress = this.config.assetsHumanToChainAddress[aToken]![network]!;
+        const allocation = await fetchAaveAllocationForToken(network, aTokenAddress, this.accountAddressOneBalance!);
+        console.log('🔍 Allocation:', allocation);  
+
+        this.existingAllocations[token] = {
+          amount: allocation.balance,
+          atAPY: 0,
+          chainId: this.config.chainsHumanToOB[network]!
+        };
+      }
     }
   }
 }

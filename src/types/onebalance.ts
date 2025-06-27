@@ -1,5 +1,34 @@
 import { HashTypedDataParameters } from "viem";
 
+export interface IndividualAssetBalance {
+    assetType: string;
+    balance: string;
+    fiatValue: number;
+}
+
+export interface AggregatedAssetBalance {
+    aggregatedAssetId: string;
+    balance: string;
+    individualAssetBalances: IndividualAssetBalance[];
+    fiatValue: number;
+}
+
+export interface SpecificAssetBalance {
+    assetType: string;
+    balance: string;
+    fiatValue: number;
+}
+
+export interface TotalBalance {
+    fiatValue: number;
+}
+
+export interface AggregatedBalanceParticular {
+    balanceByAggregatedAsset: AggregatedAssetBalance[];
+    balanceBySpecificAsset: SpecificAssetBalance[];
+    totalBalance: TotalBalance;
+}
+
 type Hex = `0x${string}`;
 
 export interface EvmAccount {

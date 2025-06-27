@@ -1,32 +1,41 @@
 import { Config } from "../config";
-import { PrepareCallRequest } from "../types/onebalance";
+import { AggregatedAssetBalance, PrepareCallRequest, TokenAllowanceRequirement, TokenRequirement } from "../types/onebalance";
 import { encodeFunctionData, parseAbi } from "viem";
+
 
 export async function prepareCallRequestAaveSupply(
     config: Config,
     accountAddressOneBalance: string,
-    amount: string,
-    sourceAsset: string,
-    sourceChain: string,
-    targetChain: string,
+    aggregatedAssetBalance: AggregatedAssetBalance,
+    targetChainId: string,
+    targetChainTokenAddress: string
 ): Promise<PrepareCallRequest> {
 
     const supplyDefinition = parseAbi(["function supply(address asset, uint256 amount, address onBehalfOf, uint16 referralCode)"]);
-    const assetAddress: string = config.assetsHumanToChainAddress[sourceAsset]![sourceChain]!;
+
+    const assetRequirements: TokenRequirement[] = aggregatedAssetBalance.individualAssetBalances.map(asset => ({
+        assetType: asset.assetType,
+        amount: asset.balance,
+    }));
+
+    const lendingPoolAddress = config.aaveLendingPools[targetChainId] as `0x${string}`;
+
+    const assetApprovals: TokenAllowanceRequirement[] = aggregatedAssetBalance.individualAssetBalances.map(asset => {
+        return {
+            assetType: asset.assetType,
+            amount: asset.balance,
+            spender: lendingPoolAddress,
+        };
+    });
 
     const supplyCalldata = encodeFunctionData({
         abi: supplyDefinition,
         functionName: 'supply',
-        args: [assetAddress as `0x${string}`, BigInt(amount), accountAddressOneBalance as `0x${string}`, 0],
+        args: [targetChainTokenAddress as `0x${string}`, BigInt(aggregatedAssetBalance.balance), accountAddressOneBalance as `0x${string}`, 0],
     });
 
     const sessionAddress = config.getWallet().address;
     const adminAddress = config.getWallet().address;
-
-    const sourceChainId = config.chainsHumanToOB[sourceChain]!;
-    const targetChainId = config.chainsHumanToOB[targetChain]!;
-    const lendingPoolAddress = config.aaveLendingPools[targetChainId] as `0x${string}`;
-    const assetAddressOneBalance = `${sourceChainId}/erc20:${assetAddress}`;
 
     return {
         account: {
@@ -42,19 +51,52 @@ export async function prepareCallRequestAaveSupply(
                 value: '0x0',
             },
         ],
-        allowanceRequirements: [
+        allowanceRequirements: assetApprovals,
+        tokensRequired: assetRequirements,
+        overrides: [],
+        validAfter: '0',
+    };
+}
+
+export async function prepareCallRequestAaveWithdraw(
+    config: Config,
+    accountAddressOneBalance: string,
+    amount: string,
+    fromAsset: string,
+    fromChain: string
+): Promise<PrepareCallRequest> {
+
+    const withdrawDefinition = parseAbi(["function withdraw(address asset, uint256 amount, address to)"]);
+    const assetAddress: string = config.assetsHumanToChainAddress[fromAsset]![fromChain]!;
+
+    const withdrawCalldata = encodeFunctionData({
+        abi: withdrawDefinition,
+        functionName: 'withdraw',
+        args: [assetAddress as `0x${string}`, BigInt(amount), accountAddressOneBalance as `0x${string}`],
+    });
+
+    const sessionAddress = config.getWallet().address;
+    const adminAddress = config.getWallet().address;
+
+    const fromChainId = config.chainsHumanToOB[fromChain]!;
+    const lendingPoolAddress = config.aaveLendingPools[fromChainId] as `0x${string}`;
+
+    return {
+        account: {
+            accountAddress: accountAddressOneBalance as `0x${string}`,
+            sessionAddress: sessionAddress as `0x${string}`,
+            adminAddress: adminAddress as `0x${string}`,
+        },
+        targetChain: fromChainId,
+        calls: [
             {
-                assetType: assetAddressOneBalance,
-                amount: amount,
-                spender: lendingPoolAddress,
-            }
-        ],
-        tokensRequired: [
-            {
-                assetType: assetAddressOneBalance,
-                amount: amount,
+                to: lendingPoolAddress,
+                data: withdrawCalldata as `0x${string}`,
+                value: '0x0',
             },
         ],
+        allowanceRequirements: [],
+        tokensRequired: [],
         overrides: [],
         validAfter: '0',
     };
