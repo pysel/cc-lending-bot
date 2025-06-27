@@ -7,5 +7,5 @@ export function toOneBalanceAssetId(chainId: string, token: string) {
 }
 
 export function toAggregatedAssetId(token: string) {
-    return `ds:${token.toLowerCase()}`;
+    return `ob:${token.toLowerCase()}`;
 }

@@ -11,7 +11,7 @@ export interface BotConfig {
   oneBalanceApiKey: string;
   aaveLendingPools: Record<string, string>;
   chainsHumanToOB: Record<string, string>;
-  assetsHumanToOB: Record<string, string>;
+  // assetsHumanToOB: Record<string, string>;
   getWallet(): Wallet;
   isValid(): boolean;
   isDevelopment(): boolean;

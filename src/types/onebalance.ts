@@ -6,16 +6,10 @@ export interface IndividualAssetBalance {
     fiatValue: number;
 }
 
-export interface AggregatedAssetBalance {
+export interface BalanceByAggregatedAsset {
     aggregatedAssetId: string;
     balance: string;
     individualAssetBalances: IndividualAssetBalance[];
-    fiatValue: number;
-}
-
-export interface SpecificAssetBalance {
-    assetType: string;
-    balance: string;
     fiatValue: number;
 }
 
@@ -24,8 +18,8 @@ export interface TotalBalance {
 }
 
 export interface AggregatedBalanceParticular {
-    balanceByAggregatedAsset: AggregatedAssetBalance[];
-    balanceBySpecificAsset: SpecificAssetBalance[];
+    balanceByAggregatedAsset: BalanceByAggregatedAsset[];
+    balanceBySpecificAsset: IndividualAssetBalance[];
     totalBalance: TotalBalance;
 }
 

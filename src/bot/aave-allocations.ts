@@ -94,8 +94,9 @@ export async function executeAaveQuote(
 
   // Sign the chain operation
   const signedChainOp = await signOperation(preparedQuote.chainOperation, wallet.privateKey as `0x${string}`);
-  console.log('🔍 Signed chain op:', signedChainOp);
+  // console.log('🔍 Signed chain op:', signedChainOp);
 
+  console.log('🔍 Aggregated asset id:', aggregatedAssetId);
   // Create the call request
   const callRequest: CallRequest = {
     fromAggregatedAssetId: aggregatedAssetId,

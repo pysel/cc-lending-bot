@@ -1,5 +1,7 @@
 import { BotConfig } from '../types';
-import { Wallet, JsonRpcProvider } from 'ethers';
+import { Wallet, JsonRpcProvider, ethers } from 'ethers';
+import { createPublicClient, http } from 'viem';
+import { arbitrum } from 'viem/chains';
 import { ETHEREUM, ARBITRUM, POLYGON, OPTIMISM } from 'lending-apy-fetcher-ts';
 
 /**
@@ -27,10 +29,6 @@ export class Config implements BotConfig {
     [OPTIMISM]: 'eip155:10',
   }
 
-  public readonly assetsHumanToOB: Record<string, string> = {
-    "USDC": 'ds:usdc',
-  }
-
   public readonly assetsHumanToChainAddress: Record<string, Record<string, string>> = {
     "USDC": { 
       [ETHEREUM]: '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48',
@@ -47,14 +45,16 @@ export class Config implements BotConfig {
   }
 
   private _wallet: Wallet | null = null;
+  public arbitrumProvider: JsonRpcProvider | null = null;
 
   constructor() {
     this.nodeEnv = process.env['NODE_ENV'] ?? 'development';
     this.logLevel = process.env['LOG_LEVEL'] ?? 'info';
     this.apiUrl = process.env['API_URL'] ?? 'https://api.example.com';
     this.privateKey = process.env['PRIVATE_KEY'] ?? '';
-    this.rpcUrl = process.env['RPC_URL'] ?? 'https://mainnet.infura.io/v3/YOUR_PROJECT_ID';
+    this.rpcUrl = process.env['ARBITRUM_RPC_URL'] ?? 'https://arb1.arbitrum.io/rpc';
     this.oneBalanceApiKey = process.env['ONE_BALANCE_API_KEY'] ?? '';
+    this.arbitrumProvider = new ethers.JsonRpcProvider(this.rpcUrl);
   }
 
   /**
@@ -65,8 +65,7 @@ export class Config implements BotConfig {
       if (!this.privateKey) {
         throw new Error('Private key not found in environment variables');
       }
-      const provider = new JsonRpcProvider(this.rpcUrl);
-      this._wallet = new Wallet(this.privateKey, provider);
+      this._wallet = new Wallet(this.privateKey, this.arbitrumProvider);
     }
     return this._wallet;
   }
