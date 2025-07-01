@@ -24,8 +24,6 @@ export const apiClient = (apiKey: string) => axios.create({
     },  
 });
 
-const enabledTokens = ["USDC"];
-
 export interface Allocation {
   amount: string;
   atAPY: number;
@@ -40,7 +38,6 @@ export class Bot implements IBotInterface {
   private status: BotStatus = BotStatus.IDLE;
   private intervalId: NodeJS.Timeout | null = null;
   private apiClient: AxiosInstance;
-  protected accountAddressOneBalance: string | null = null;
   protected existingAllocations: Record<string, Allocation> = {}; // token symbol -> current allocation
   protected vaultManager: VaultManager | null = null;
 
@@ -50,7 +47,7 @@ export class Bot implements IBotInterface {
 
     // Initialize vault on Arbitrum only (where vault contract lives)
     this.initializeVault({
-      "USDC": "0x463b469DE0447fA531A44b6Ef8f76A54041f120F", // Arbitrum vault contract
+      "USDC": this.config.arbitrumVaults["USDC"]!, // Arbitrum vault contract
     });
     
     console.log('🏦 Vault initialized on Arbitrum');
@@ -86,7 +83,7 @@ export class Bot implements IBotInterface {
 
         for (const apyData of bestApyData) {
           // skip if the token is not enabled
-          if (!enabledTokens.includes(apyData.token_symbol)) {
+          if (!this.vaultManager!.getVaultContracts().has(apyData.token_symbol)) {
             continue;
           }
 
@@ -101,11 +98,12 @@ export class Bot implements IBotInterface {
           const withdrawAmount = this.existingAllocations[token]!.amount;
 
           if (withdrawAmount !== '0') {
-            const prepareWithdrawQuoteRequest = await prepareCallRequestAaveWithdraw(this.config, this.accountAddressOneBalance!, withdrawAmount, token, apyChainId);
-            await executeAaveQuote(prepareWithdrawQuoteRequest, this.config.getWallet(), this.accountAddressOneBalance!, aggregatedAsset);
+            const fromChain = this.existingAllocations[token]!.chainId;
+            const prepareWithdrawQuoteRequest = await prepareCallRequestAaveWithdraw(this.config, withdrawAmount, token, fromChain);
+            await executeAaveQuote(prepareWithdrawQuoteRequest, this.config.getWallet(), this.config.addressOneBalance!, aggregatedAsset);
           }
           
-          const aggregatedAssetBalance = await this.getAggregatedBalanceForToken(this.accountAddressOneBalance!, aggregatedAsset);
+          const aggregatedAssetBalance = await this.getAggregatedBalanceForToken(this.config.addressOneBalance!, aggregatedAsset);
           const tokenAddress = this.config.assetsHumanToChainAddress[token]![apyData.network]!;
 
           // reallocate the funds - iterate over each individual asset balance
@@ -117,22 +115,21 @@ export class Bot implements IBotInterface {
 
             const prepareSupplyQuoteRequest = await prepareCallRequestAaveSupply(
               this.config, 
-              this.accountAddressOneBalance!, 
-              individualAsset, 
               apyChainId, 
-              tokenAddress
+              tokenAddress,
+              individualAsset.balance
             );
 
-            await executeAaveQuote(prepareSupplyQuoteRequest, this.config.getWallet(), this.accountAddressOneBalance!, aggregatedAsset);
+            await executeAaveQuote(prepareSupplyQuoteRequest, this.config.getWallet(), this.config.addressOneBalance!, aggregatedAsset);
           }
         } 
       }
 
       // // quote from eth -> arbitrum aave supply
-      // const prepareQuoteRequest = await prepareCallRequestAaveSupply(this.config, this.accountAddressOneBalance!, '1', "USDC", "ARBITRUM", "POLYGON");
+      // const prepareQuoteRequest = await prepareCallRequestAaveSupply(this.config, this.config.addressOneBalance!, '1', "USDC", "ARBITRUM", "POLYGON");
       // // console.log('🔍 Prepare quote request:', prepareQuoteRequest);
 
-      // await executeAaveSupplyQuote(prepareQuoteRequest, this.config, this.accountAddressOneBalance!);
+      // await executeAaveSupplyQuote(prepareQuoteRequest, this.config, this.config.addressOneBalance!);
     } catch (error) {
       this.status = BotStatus.ERROR;  
       this.emitEvent({ 
@@ -147,9 +144,11 @@ export class Bot implements IBotInterface {
   // ________ ONEBALANCE FUNCTIONS ________
   async setupOneBalanceAccount() {
     const wallet = this.config.getWallet();
-    const predictedAddress = await this.predictAccountAddress(wallet.address, wallet.address);
-    this.accountAddressOneBalance = predictedAddress;
-    console.log('🔍 Account address:', this.accountAddressOneBalance);
+    if (!this.config.addressOneBalance) {
+      const predictedAddress = await this.predictAccountAddress(wallet.address, wallet.address);
+      this.config.addressOneBalance = predictedAddress;
+    }
+    console.log('🔍 Account address:', this.config.addressOneBalance);
   }
 
   async getAggregatedBalance(address: string) {
@@ -212,18 +211,18 @@ export class Bot implements IBotInterface {
    * Gets the OneBalance account address
    */
   public getAccountAddressOneBalance(): string | null {
-    return this.accountAddressOneBalance;
+    return this.config.addressOneBalance;
   }
 
   /**
    * Initialize vault functionality with multiple token vaults (all on Arbitrum)
    */
-  public initializeVault(vaultContracts: Record<string, Address>): void {
+  public initializeVault(vaultContracts: Record<string, string>): void {
     this.vaultManager = new VaultManager(this.config);
     
     // Add all vault contracts (they're all on Arbitrum)
     for (const [token, contractAddress] of Object.entries(vaultContracts)) {
-      this.vaultManager.addVaultContract(token, contractAddress);
+      this.vaultManager.addVaultContract(token, contractAddress as `0x${string}`);
     }
     
     console.log('🏦 Vault manager initialized on Arbitrum:', vaultContracts);
@@ -255,9 +254,9 @@ export class Bot implements IBotInterface {
     const depositFilter = {
       address: contractAddress,
       topics: [
-          ethers.id("Deposit(address,uint256)")
+        ethers.id("Deposit(address,uint256)")
       ]
-  } 
+    } 
 
     // Listen for deposit events
     this.config.arbitrumProvider!.on(depositFilter, (deposit) => {
@@ -274,7 +273,7 @@ export class Bot implements IBotInterface {
     const withdrawFilter = {  
       address: contractAddress,
       topics: [
-          ethers.id("Withdraw(address,uint256)")
+        ethers.id("Withdraw(address,uint256)")
       ]
     }
 
@@ -308,14 +307,13 @@ export class Bot implements IBotInterface {
       const chainName = this.getChainHumanName(chainId); // Convert chainId to human name
       const prepareWithdrawQuoteRequest = await prepareCallRequestAaveWithdraw(
         this.config,
-        this.accountAddressOneBalance!,
         amount,
         token,
         chainName, // Use human-readable chain name instead of chainId
         userAddress // Pass user address as the 'to' parameter for Aave withdrawal
       );
 
-      await executeAaveQuote(prepareWithdrawQuoteRequest, this.config.getWallet(), this.accountAddressOneBalance!, toAggregatedAssetId(token));
+      await executeAaveQuote(prepareWithdrawQuoteRequest, this.config.getWallet(), this.config.addressOneBalance!, toAggregatedAssetId(token));
       
       // Update allocation tracking
       const newAmount = (BigInt(allocation.amount) - BigInt(amount)).toString();
@@ -349,7 +347,7 @@ export class Bot implements IBotInterface {
       // Supply the funds directly to Aave (no need to withdraw from vault)
       const aggregatedAsset = toAggregatedAssetId(token);
       const aggregatedAssetBalance = await this.getAggregatedBalanceForToken(
-        this.accountAddressOneBalance!, 
+        this.config.addressOneBalance!, 
         aggregatedAsset
       );
 
@@ -363,19 +361,25 @@ export class Bot implements IBotInterface {
         }
 
         if (individualAsset.balance < amount) {
-          console.log(`ERROR: THIS SHOULD NEVER HAPPEN`);
+          console.log(`ERROR: THIS SHOULD NEVER HAPPEN`); // because this function is called only after deposit happens on chain
           continue;
         }
 
+        const individualAssetWithUserBalance = {
+          ...individualAsset,
+          balance: amount
+        };
+
         const prepareSupplyQuoteRequest = await prepareCallRequestAaveSupply(
           this.config,
-          this.accountAddressOneBalance!,
-          individualAsset,
           chainId,
-          tokenAddress
+          tokenAddress,
+          amount
         );
 
-        await executeAaveQuote(prepareSupplyQuoteRequest, this.config.getWallet(), this.accountAddressOneBalance!, aggregatedAsset);
+        console.log(prepareSupplyQuoteRequest);
+
+        await executeAaveQuote(prepareSupplyQuoteRequest, this.config.getWallet(), this.config.addressOneBalance!, aggregatedAsset);
       }
 
       // Update allocation tracking
@@ -475,10 +479,10 @@ export class Bot implements IBotInterface {
   async fetchExistingAllocations() {
     for (const protocol of allProtocols) {
       const network = protocol.network;
-      for (const token of enabledTokens) {
+      for (const token of this.vaultManager!.getVaultContracts().keys()) {
         const aToken = toAToken(token);
         const aTokenAddress = this.config.assetsHumanToChainAddress[aToken]![network]!;
-        const allocation = await fetchAaveAllocationForToken(network, aTokenAddress, this.accountAddressOneBalance!);
+        const allocation = await fetchAaveAllocationForToken(network, aTokenAddress, this.config.addressOneBalance!);
         // console.log('🔍 Allocation:', allocation);  
 
         this.existingAllocations[token] = {

@@ -14,6 +14,7 @@ export class Config implements BotConfig {
   public readonly privateKey: string;
   public readonly rpcUrl: string;
   public readonly oneBalanceApiKey: string;
+  public addressOneBalance: string | null = null;
 
   public readonly aaveLendingPools: Record<string, string> = {
     'eip155:1': '0x87870Bca3F3fD6335C3F4ce8392D69350B4fA4E2',
@@ -42,6 +43,10 @@ export class Config implements BotConfig {
       [POLYGON]: '0x625E7708f30cA75bfd92586e17077590C60eb4cD',
       [OPTIMISM]: '0x625E7708f30cA75bfd92586e17077590C60eb4cD',
     }
+  }
+
+  public readonly arbitrumVaults: Record<string, string> = {
+    "USDC": "0xaC2Eb76075259F26E1760032472e39984E9Ef7f9", // Arbitrum vault contract
   }
 
   private _wallet: Wallet | null = null;

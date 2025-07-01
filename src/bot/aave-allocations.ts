@@ -109,6 +109,7 @@ export async function executeAaveQuote(
   const quote = await fetchCallQuote(callRequest);
 
   // Execute the quote
+  console.log('🔍 Executing quote:', quote);
   const bundle = await executeQuote(quote);
 
   // Monitor transaction completion
