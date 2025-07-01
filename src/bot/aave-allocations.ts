@@ -1,11 +1,12 @@
 import { executeQuote, fetchCallQuote, fetchTransactionHistory, prepareCallQuote } from '../lib/onebalance';
-import { signOperation } from '../lib/signer';
+import { signOperation, signQuote } from '../lib/signer';
 import { CallRequest, EvmAccount, PrepareCallRequest } from '../types/onebalance';
 import { Wallet } from 'ethers';
 
 import {ethereumProvider, arbitrumProvider, polygonProvider, optimismProvider } from "lending-apy-fetcher-ts";
 import { ETHEREUM, ARBITRUM, POLYGON, OPTIMISM } from "lending-apy-fetcher-ts";
 import { ethers } from "ethers";
+import { Config } from '../config';
 
 // ERC-20 ABI with essential functions
 export const ERC20_ABI = [
@@ -76,16 +77,15 @@ export async function getERC20Balance(provider: any, tokenAddress: string, accou
  * @returns Promise<void>
  */
 export async function executeAaveQuote(
+  config: Config,
   prepareQuoteRequest: PrepareCallRequest,
-  wallet: Wallet,
-  accountAddressOneBalance: string,
   aggregatedAssetId: string
 ): Promise<void> {
 
   const evmAccount: EvmAccount = {
-    accountAddress: accountAddressOneBalance as `0x${string}`,
-    sessionAddress: wallet.address as `0x${string}`,
-    adminAddress: wallet.address as `0x${string}`,
+    accountAddress: config.addressOneBalance as `0x${string}`,
+    sessionAddress: config.getWallet().address as `0x${string}`,
+    adminAddress: config.getWallet().address as `0x${string}`,
   };
 
   // Prepare the quote
@@ -93,7 +93,8 @@ export async function executeAaveQuote(
   // console.log('🔍 Quote:', preparedQuote);
 
   // Sign the chain operation
-  const signedChainOp = await signOperation(preparedQuote.chainOperation, wallet.privateKey as `0x${string}`);
+  const signWithWallet = signOperation(config.getWallet());
+  const signedChainOp = await signWithWallet(preparedQuote.chainOperation)();
   // console.log('🔍 Signed chain op:', signedChainOp);
 
   console.log('🔍 Aggregated asset id:', aggregatedAssetId);
@@ -108,9 +109,11 @@ export async function executeAaveQuote(
   // Fetch the call quote
   const quote = await fetchCallQuote(callRequest);
 
+  const signedQuote = await signQuote(quote, config.getWallet());
+
   // Execute the quote
-  console.log('🔍 Executing quote:', quote);
-  const bundle = await executeQuote(quote);
+  console.log('🔍 Executing quote:', signedQuote);
+  const bundle = await executeQuote(signedQuote);
 
   // Monitor transaction completion
   if (bundle.success) {

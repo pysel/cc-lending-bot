@@ -100,7 +100,7 @@ export class Bot implements IBotInterface {
           if (withdrawAmount !== '0') {
             const fromChain = this.existingAllocations[token]!.chainId;
             const prepareWithdrawQuoteRequest = await prepareCallRequestAaveWithdraw(this.config, withdrawAmount, token, fromChain);
-            await executeAaveQuote(prepareWithdrawQuoteRequest, this.config.getWallet(), this.config.addressOneBalance!, aggregatedAsset);
+            await executeAaveQuote(this.config, prepareWithdrawQuoteRequest, aggregatedAsset);
           }
           
           const aggregatedAssetBalance = await this.getAggregatedBalanceForToken(this.config.addressOneBalance!, aggregatedAsset);
@@ -120,7 +120,7 @@ export class Bot implements IBotInterface {
               individualAsset.balance
             );
 
-            await executeAaveQuote(prepareSupplyQuoteRequest, this.config.getWallet(), this.config.addressOneBalance!, aggregatedAsset);
+            await executeAaveQuote(this.config, prepareSupplyQuoteRequest, aggregatedAsset);
           }
         } 
       }
@@ -254,7 +254,7 @@ export class Bot implements IBotInterface {
     const depositFilter = {
       address: contractAddress,
       topics: [
-        ethers.id("Deposit(address,uint256)")
+        ethers.id("Deposit(address,uint256,uint256)")
       ]
     } 
 
@@ -273,7 +273,7 @@ export class Bot implements IBotInterface {
     const withdrawFilter = {  
       address: contractAddress,
       topics: [
-        ethers.id("Withdraw(address,uint256)")
+        ethers.id("Withdraw(address,uint256,uint256)")
       ]
     }
 
@@ -313,8 +313,8 @@ export class Bot implements IBotInterface {
         userAddress // Pass user address as the 'to' parameter for Aave withdrawal
       );
 
-      await executeAaveQuote(prepareWithdrawQuoteRequest, this.config.getWallet(), this.config.addressOneBalance!, toAggregatedAssetId(token));
-      
+      await executeAaveQuote(this.config, prepareWithdrawQuoteRequest, toAggregatedAssetId(token));
+
       // Update allocation tracking
       const newAmount = (BigInt(allocation.amount) - BigInt(amount)).toString();
       this.existingAllocations[token] = {
@@ -351,36 +351,24 @@ export class Bot implements IBotInterface {
         aggregatedAsset
       );
 
+      if (aggregatedAssetBalance.balance < amount) {
+        console.log(`ERROR: THIS SHOULD NEVER HAPPEN`); // because this function is called only after deposit happens on chain
+        return;
+      }
+
       const chainId = allocation.chainId;
       const tokenAddress = this.config.assetsHumanToChainAddress[token]![this.getChainHumanName(chainId)]!;
 
-      // Process each individual asset balance
-      for (const individualAsset of aggregatedAssetBalance.individualAssetBalances) {
-        if (individualAsset.balance === '0') {
-          continue;
-        }
+      const prepareSupplyQuoteRequest = await prepareCallRequestAaveSupply(
+        this.config,
+        chainId,
+        tokenAddress,
+        amount
+      );
 
-        if (individualAsset.balance < amount) {
-          console.log(`ERROR: THIS SHOULD NEVER HAPPEN`); // because this function is called only after deposit happens on chain
-          continue;
-        }
+      console.log(prepareSupplyQuoteRequest);
 
-        const individualAssetWithUserBalance = {
-          ...individualAsset,
-          balance: amount
-        };
-
-        const prepareSupplyQuoteRequest = await prepareCallRequestAaveSupply(
-          this.config,
-          chainId,
-          tokenAddress,
-          amount
-        );
-
-        console.log(prepareSupplyQuoteRequest);
-
-        await executeAaveQuote(prepareSupplyQuoteRequest, this.config.getWallet(), this.config.addressOneBalance!, aggregatedAsset);
-      }
+      await executeAaveQuote(this.config, prepareSupplyQuoteRequest, aggregatedAsset);
 
       // Update allocation tracking
       const newAmount = (BigInt(allocation.amount) + BigInt(amount)).toString();

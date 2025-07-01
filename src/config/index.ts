@@ -1,7 +1,8 @@
 import { BotConfig } from '../types';
 import { Wallet, JsonRpcProvider, ethers } from 'ethers';
-import { createPublicClient, http } from 'viem';
+import { createPublicClient, createWalletClient, http } from 'viem';
 import { arbitrum } from 'viem/chains';
+import { privateKeyToAccount } from 'viem/accounts';
 import { ETHEREUM, ARBITRUM, POLYGON, OPTIMISM } from 'lending-apy-fetcher-ts';
 
 /**
@@ -46,11 +47,13 @@ export class Config implements BotConfig {
   }
 
   public readonly arbitrumVaults: Record<string, string> = {
-    "USDC": "0xaC2Eb76075259F26E1760032472e39984E9Ef7f9", // Arbitrum vault contract
+    "USDC": "0x97C2840D9DC9C0d168bc8A87cceEB1a29D6Db2d7", // Arbitrum vault contract
   }
 
   private _wallet: Wallet | null = null;
   public arbitrumProvider: JsonRpcProvider | null = null;
+  public publicClient: ReturnType<typeof createPublicClient> | null = null;
+  public walletClient: ReturnType<typeof createWalletClient> | null = null;
 
   constructor() {
     this.nodeEnv = process.env['NODE_ENV'] ?? 'development';
@@ -60,6 +63,20 @@ export class Config implements BotConfig {
     this.rpcUrl = process.env['ARBITRUM_RPC_URL'] ?? 'https://arb1.arbitrum.io/rpc';
     this.oneBalanceApiKey = process.env['ONE_BALANCE_API_KEY'] ?? '';
     this.arbitrumProvider = new ethers.JsonRpcProvider(this.rpcUrl);
+    
+    // Initialize viem clients for Arbitrum
+    this.publicClient = createPublicClient({
+      chain: arbitrum,
+      transport: http(this.rpcUrl)
+    });
+    
+    if (this.privateKey) {
+      this.walletClient = createWalletClient({
+        chain: arbitrum,
+        transport: http(this.rpcUrl),
+        account: privateKeyToAccount(this.privateKey as `0x${string}`)
+      });
+    }
   }
 
   /**
