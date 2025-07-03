@@ -1,5 +1,5 @@
 {
-  "lastKnownBlock": 353926540,
+  "lastKnownBlock": 353926991,
   "allocations": {
     "USDC": {
       "amount": "0",
@@ -7,7 +7,7 @@
       "chain": "ARBITRUM"
     },
     "USDT": {
-      "amount": "100000",
+      "amount": "0",
       "atAPY": 0,
       "chain": "ARBITRUM"
     }
