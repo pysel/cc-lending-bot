@@ -1,8 +1,6 @@
-import { executeQuote, fetchCallQuote, fetchTransactionHistory, prepareCallQuote } from '../lib/onebalance';
+import { executeQuote, fetchCallQuote, getQuoteStatus, prepareCallQuote } from '../lib/onebalance';
 import { signOperation, signQuote } from '../lib/signer';
 import { CallRequest, EvmAccount, PrepareCallRequest } from '../types/onebalance';
-import { Wallet } from 'ethers';
-
 import {ethereumProvider, arbitrumProvider, polygonProvider, optimismProvider } from "lending-apy-fetcher-ts";
 import { ETHEREUM, ARBITRUM, POLYGON, OPTIMISM } from "lending-apy-fetcher-ts";
 import { ethers } from "ethers";
@@ -95,7 +93,6 @@ export async function executeAaveQuote(
   // Sign the chain operation
   const signWithWallet = signOperation(config.getWallet());
   const signedChainOp = await signWithWallet(preparedQuote.chainOperation)();
-  // console.log('🔍 Signed chain op:', signedChainOp);
 
   console.log('🔍 Aggregated asset id:', aggregatedAssetId);
   // Create the call request
@@ -115,38 +112,46 @@ export async function executeAaveQuote(
   console.log('🔍 Executing quote:', signedQuote);
   const bundle = await executeQuote(signedQuote);
 
-  // Monitor transaction completion
+  // Monitor transaction completion using quote status
   if (bundle.success) {
+    console.log('✅ Bundle executed successfully, monitoring quote status...');
+    
     const timeout = 60_000;
     let completed = false;
     const startTime = Date.now();
 
     while (!completed) {
       try {
-        const transactionHistory = await fetchTransactionHistory(quote.account.accountAddress);
+        const quoteStatus = await getQuoteStatus(quote.id);
+        console.log(`📊 Quote ${quote.id} status: ${quoteStatus.status}`);
 
-        if (transactionHistory.transactions.length > 0) {
-          const [tx] = transactionHistory.transactions;
-
-          if (tx?.quoteId === quote.id) {
-            if (tx?.status === 'COMPLETED') {
-              console.log('Transaction completed and operation executed');
-              completed = true;
-              break;
-            }
-            console.log('Transaction status: ', tx.status);
+        if (quoteStatus.status === 'COMPLETED') {
+          console.log('✅ Transaction completed and operation executed');
+          completed = true;
+          break;
+        } else if (quoteStatus.status === 'FAILED' || quoteStatus.status === 'REFUNDED') {
+          console.error(`❌ Transaction failed with status: ${quoteStatus.status}`);
+          if (quoteStatus.error) {
+            console.error(`Error details: ${quoteStatus.error}`);
           }
+          throw new Error(`Transaction failed: ${quoteStatus.status}`);
         }
-      } catch {}
+      } catch (error) {
+        console.error('❌ Error checking quote status:', error);
+      }
 
       if (Date.now() - startTime > timeout) {
         throw new Error('Transaction not completed in time');
       }
 
-      await new Promise((resolve) => setTimeout(resolve, 1_000));
+      await new Promise((resolve) => setTimeout(resolve, 2_000)); // Poll every 2 seconds
     }
   } else {
-    console.log('Bundle execution failed');
+    console.error('❌ Bundle execution failed');
+    if (bundle.error) {
+      console.error(`Bundle error: ${bundle.error}`);
+    }
+    throw new Error('Bundle execution failed');
   }
 }
 

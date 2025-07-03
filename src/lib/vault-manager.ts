@@ -3,45 +3,44 @@ import { Config } from '../config';
 import { UserBalance, VaultMetrics } from '../types/vault';
 import { ethers } from 'ethers';
 
+export const VAULT_ABI_ETHERS = [
+  // View functions
+  'function getCurrentATokenBalance() external view returns (uint256)',
+  'function getSharePrice() external view returns (uint256)',
+  'function calculateSharesToMint(uint256 depositAmount) external view returns (uint256)',
+  'function calculateTokensForShares(uint256 shares) external view returns (uint256)',
+  'function getUserWithdrawableAmount(address user) external view returns (uint256)',
+  'function getUserShares(address user) external view returns (uint256)',
+  'function getUserDepositAmount(address user) external view returns (uint256)',
+  'function getTotalYieldEarned() external view returns (uint256)',
+  'function getUserYieldAmount(address user) external view returns (uint256)',
+  
+  // State view functions
+  'function userInfo(address) external view returns (uint256 shares, uint256 lastDepositTime, bool isActive)',
+  'function totalShares() external view returns (uint256)',
+  'function totalDeposits() external view returns (uint256)',
+  'function currentAllocation() external view returns (string)',
+  'function currentAPY() external view returns (uint256)',
+  'function token() external view returns (address)',
+  'function aToken() external view returns (address)',
+  'function bot() external view returns (address)',
+  
+  // Write functions
+  'function deposit(address user, uint256 amount) external',
+  'function withdraw(address user, uint256 amount) external',
+  'function setCurrentAllocation(string _currentAllocation, uint256 _currentAPY) external',
+  
+  // Events
+  'event Deposit(address indexed user, uint256 amount, uint256 shares)',
+  'event Withdraw(address indexed user, uint256 amount, uint256 shares)'
+];
+
 /**
  * Simplified vault manager for Arbitrum-only token vault contracts
  */
 export class VaultManager {
   private config: Config;
   private vaultContracts: Map<string, Address> = new Map(); // token -> contract address
-  
-  // Ethers ABI for contract interactions
-  private readonly VAULT_ABI_ETHERS = [
-    // View functions
-    'function getCurrentATokenBalance() external view returns (uint256)',
-    'function getSharePrice() external view returns (uint256)',
-    'function calculateSharesToMint(uint256 depositAmount) external view returns (uint256)',
-    'function calculateTokensForShares(uint256 shares) external view returns (uint256)',
-    'function getUserWithdrawableAmount(address user) external view returns (uint256)',
-    'function getUserShares(address user) external view returns (uint256)',
-    'function getUserDepositAmount(address user) external view returns (uint256)',
-    'function getTotalYieldEarned() external view returns (uint256)',
-    'function getUserYieldAmount(address user) external view returns (uint256)',
-    
-    // State view functions
-    'function userInfo(address) external view returns (uint256 shares, uint256 lastDepositTime, bool isActive)',
-    'function totalShares() external view returns (uint256)',
-    'function totalDeposits() external view returns (uint256)',
-    'function currentAllocation() external view returns (string)',
-    'function currentAPY() external view returns (uint256)',
-    'function token() external view returns (address)',
-    'function aToken() external view returns (address)',
-    'function bot() external view returns (address)',
-    
-    // Write functions
-    'function deposit(address user, uint256 amount) external',
-    'function withdraw(address user, uint256 amount) external',
-    'function setCurrentAllocation(string _currentAllocation, uint256 _currentAPY) external',
-    
-    // Events
-    'event Deposit(address indexed user, uint256 amount, uint256 shares)',
-    'event Withdraw(address indexed user, uint256 amount, uint256 shares)'
-  ];
 
   constructor(config: Config) {
     this.config = config;
@@ -98,7 +97,7 @@ export class VaultManager {
     }
 
     try {
-      const contract = new ethers.Contract(vaultContract, this.VAULT_ABI_ETHERS, this.config.arbitrumProvider);
+      const contract = new ethers.Contract(vaultContract, VAULT_ABI_ETHERS, this.config.arbitrumProvider);
 
       const [shares, withdrawableAmount, originalDeposit, yieldEarned, userInfo, sharePrice] = await Promise.all([
         contract['getUserShares']!(userAddress),
@@ -149,7 +148,7 @@ export class VaultManager {
     }
 
     try {
-      const contract = new ethers.Contract(vaultContract, this.VAULT_ABI_ETHERS, this.config.arbitrumProvider);
+      const contract = new ethers.Contract(vaultContract, VAULT_ABI_ETHERS, this.config.arbitrumProvider);
 
       const [totalShares, totalDeposits, aTokenBalance, totalYield, sharePrice, allocation, apy] = await Promise.all([
         contract['totalShares']!(),
@@ -196,7 +195,7 @@ export class VaultManager {
     const amount = ethers.parseUnits(depositAmount, decimals);
 
     try {
-      const contract = new ethers.Contract(vaultContract, this.VAULT_ABI_ETHERS, this.config.arbitrumProvider);
+      const contract = new ethers.Contract(vaultContract, VAULT_ABI_ETHERS, this.config.arbitrumProvider);
       const shares = await contract['calculateSharesToMint']!(amount);
 
       return ethers.formatUnits(shares, decimals);
@@ -223,7 +222,7 @@ export class VaultManager {
     const shares = ethers.parseUnits(sharesAmount, decimals);
 
     try {
-      const contract = new ethers.Contract(vaultContract, this.VAULT_ABI_ETHERS, this.config.arbitrumProvider);
+      const contract = new ethers.Contract(vaultContract, VAULT_ABI_ETHERS, this.config.arbitrumProvider);
       const tokens = await contract['calculateTokensForShares']!(shares);
 
       return ethers.formatUnits(tokens, decimals);
@@ -244,7 +243,7 @@ export class VaultManager {
 
     try {
       const wallet = this.config.getWallet();
-      const contract = new ethers.Contract(vaultContract, this.VAULT_ABI_ETHERS, wallet);
+      const contract = new ethers.Contract(vaultContract, VAULT_ABI_ETHERS, wallet);
 
       const tx = await contract['setCurrentAllocation']!(allocation, Math.round(apy * 100)); // Convert percentage to basis points
       const receipt = await tx.wait();

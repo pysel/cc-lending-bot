@@ -1,5 +1,5 @@
 import axios, { AxiosResponse } from 'axios';
-import { PrepareCallRequest, TargetCallQuote, CallRequest, Quote, BundleResponse, HistoryResponse } from '../types/onebalance';
+import { PrepareCallRequest, TargetCallQuote, CallRequest, Quote, BundleResponse, HistoryResponse, QuoteStatus } from '../types/onebalance';
 
 export const BASE_URL = 'https://be.onebalance.io';
 export const API_KEY = process.env['ONE_BALANCE_API_KEY'];
@@ -97,4 +97,8 @@ export async function fetchTransactionHistory(address: string): Promise<HistoryR
       limit: 1,
       sortBy: 'createdAt',
     });
+}
+
+export async function getQuoteStatus(quoteId: string): Promise<QuoteStatus> {
+    return apiGet<{ quoteId: string }, QuoteStatus>('/api/status/get-execution-status', { quoteId });
 }   

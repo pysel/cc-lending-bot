@@ -3,7 +3,7 @@ import { AaveEthProtocol, AavePolygonProtocol, AaveArbitrumProtocol, AaveOptimis
 
 export const allProtocols: Protocol[] = [
   // new AaveEthProtocol(),
-  // new AavePolygonProtocol(),
+  new AavePolygonProtocol(),
   new AaveArbitrumProtocol(),
-  // new AaveOptimismProtocol(),
+  new AaveOptimismProtocol(),
 ];

@@ -206,3 +206,10 @@ export interface HistoryResponse {
   transactions: HistoryTransaction[];
   continuation?: string;
 }
+
+export interface QuoteStatus {
+  quoteId: string;
+  status: OperationStatus;
+  error?: string;
+  completedAt?: string;
+}
